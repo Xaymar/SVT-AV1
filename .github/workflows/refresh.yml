@@ -1,0 +1,73 @@
+name: Refresh
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  push:
+    branches:
+      - 'automation'
+      - 'automation-test'
+
+env:
+  REMOTE: "https://gitlab.com/AOMediaCodec/SVT-AV1.git"
+  BRANCHES: "master"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    name: "Update Mirror"
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v2
+    - name: "Configure git"
+      shell: bash
+      run: |
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'xaymar@users.noreply.github.com'
+        git config pull.ff only
+        git config pull.rebase true
+    - name: "Fetch from Remote"
+      shell: bash
+      run: |
+        git remote set-url origin https://x-access-token:${{ secrets.REFRESH_ACCESS_TOKEN }}@github.com/${{ github.repository }}
+        git remote add -f --tags remote ${{ env.REMOTE }}
+        git fetch --all
+    - name: "Test & Update Branches"
+      shell: bash
+      run: |
+        echo "Testing branches..."
+        BRANCHES=(${{ env.BRANCHES }})
+        for BRANCH in ${BRANCHES[@]}; do
+          echo -n "  Verifying '${BRANCH}'..."
+
+          BRANCH_UPDATE=false
+          if ! git branch -a | grep origin/${BRANCH} > /dev/null; then
+            if git branch -a | grep remote/${BRANCH} > /dev/null; then
+              echo " Failed. Forcing update."
+              BRANCH_UPDATE=true
+            else
+              echo " Failed. Branch does not exist."
+            fi
+          elif ! git diff -s --exit-code origin/${BRANCH} remote/${BRANCH} > /dev/null; then
+            echo " Done. Requires update."
+            BRANCH_UPDATE=true
+          else
+            echo " Done. Already up to date."
+          fi
+
+          # Update known dirty branches.
+          if ${BRANCH_UPDATE}; then
+            # Update the local branch with the updated code.
+            git checkout -b "${BRANCH}" "remote/${BRANCH}" > /dev/null
+
+            # Push the branch to origin
+            git push --tags --force --set-upstream origin ${BRANCH}
+
+            # Trigger our build script.
+            #curl -s --show-error \
+            #  -X POST \
+            #  -H "Authorization: token ${{ secrets.WORKFLOW_TOKEN }}" \
+            #  -H "Accept: application/vnd.github.v3+json" \
+            #  -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"ref\":\"${d}\"}}" \
+            #  "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/dispatches"
+          fi
+        done
