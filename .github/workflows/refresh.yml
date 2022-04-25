@@ -28,7 +28,7 @@ jobs:
     - name: "Fetch from Remote"
       shell: bash
       run: |
-        git remote set-url origin https://x-access-token:${{ secrets.REFRESH_ACCESS_TOKEN }}@github.com/${{ github.repository }}
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
         git remote add -f --tags remote ${{ env.REMOTE }}
         git fetch --all
     - name: "Test & Update Branches"
